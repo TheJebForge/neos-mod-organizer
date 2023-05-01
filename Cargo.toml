@@ -1,0 +1,21 @@
+[package]
+name = "neos-mod-organizer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eframe = "0.21"
+egui_file = "0.8"
+egui-toast = "0.7"
+tokio = { version = "1", features = [ "full" ] }
+dirs = "5"
+serde = { version = "1", features = [ "derive" ] }
+serde_json = "1"
+once_cell = "1"
+mslnk = "0.1"
+strum = "0.24"
+strum_macros = "0.24"
+semver = { version = "1.0.17", features = [ "serde" ] }
+reqwest = { version = "0.11", features = [ "json" ] }
