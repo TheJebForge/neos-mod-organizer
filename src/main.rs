@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod manager;
 mod config;
 mod ui;
@@ -6,6 +8,7 @@ mod launch;
 mod manifest;
 mod version;
 
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
@@ -26,6 +29,10 @@ use crate::version::Version;
 
 
 fn main() {
+    let path = PathBuf::from("C:/Users/Jeb");
+
+    println!("{:?}", path.exists());
+
     let mut native_options = NativeOptions::default();
 
     native_options.min_window_size = Some(Vec2::new(800.0, 600.0));

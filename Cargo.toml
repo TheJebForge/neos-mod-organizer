@@ -14,8 +14,10 @@ dirs = "5"
 serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
 once_cell = "1"
-mslnk = "0.1"
 strum = "0.24"
 strum_macros = "0.24"
 semver = { version = "1.0.17", features = [ "serde" ] }
 reqwest = { version = "0.11", features = [ "json" ] }
+
+[target.'cfg(windows)'.dependencies]
+mslnk = "0.1"

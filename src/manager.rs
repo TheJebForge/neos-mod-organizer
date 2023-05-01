@@ -62,9 +62,14 @@ impl Manager {
 
                         handle_error(command.spawn(), &self.event_sender).await;
                     }
+
                     ManagerCommand::CreateShortcut(path) => {
+                        #[cfg(target_os="windows")]
                         handle_error(self.config.launch_options.make_shortcut(&self.config.neos_location, path), &self.event_sender).await;
+                        #[cfg(not(target_os="windows"))]
+                        self.event_sender.send(ManagerEvent::Error(format!("Cannot create shortcut\nmslnk wasn't compiled due to compilation target"))).await.ok();
                     }
+
                     ManagerCommand::SetLaunchOptions(options) => {
                         self.config.launch_options = options;
                         handle_error(self.config.save_config().await, &self.event_sender).await;

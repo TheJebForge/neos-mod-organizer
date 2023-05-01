@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[cfg(target_os="windows")]
 use mslnk::{MSLinkError, ShellLink};
+
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display, EnumIter};
 
@@ -306,7 +309,8 @@ impl LaunchOptions {
 
         command
     }
-
+    
+    #[cfg(target_os="windows")]
     pub fn make_shortcut(&self, neos_path: impl AsRef<Path>, shortcut_path: impl AsRef<Path>) -> Result<(), MSLinkError> {
         let neos_path = neos_path.as_ref();
         let shortcut_path = shortcut_path.as_ref();
