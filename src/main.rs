@@ -29,10 +29,6 @@ use crate::version::Version;
 
 
 fn main() {
-    let path = PathBuf::from("C:/Users/Jeb");
-
-    println!("{:?}", path.exists());
-
     let mut native_options = NativeOptions::default();
 
     native_options.min_window_size = Some(Vec2::new(800.0, 600.0));

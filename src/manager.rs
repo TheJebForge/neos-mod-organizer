@@ -50,8 +50,8 @@ impl Manager {
     pub async fn run_event_loop(&mut self) {
         self.event_sender.send(ManagerEvent::LaunchOptionsState(self.config.launch_options.clone())).await.expect("Failed");
 
-        /*let manifest = download_manifest("https://raw.githubusercontent.com/neos-modding-group/neos-mod-manifest/master/manifest.json").await.unwrap();
-        println!("{:#?}", manifest);*/
+        let manifest = download_manifest("https://raw.githubusercontent.com/neos-modding-group/neos-mod-manifest/master/manifest.json").await.unwrap();
+        println!("{:#?}", manifest);
 
         loop {
             if let Some(command) = self.command_receiver.recv().await {

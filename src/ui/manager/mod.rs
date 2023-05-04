@@ -1,9 +1,10 @@
 mod launcher;
+mod tests;
 
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
-use eframe::egui::{Button, CentralPanel, Color32, Context, RichText, ScrollArea, SidePanel, Style, Vec2};
+use eframe::egui::{Button, CentralPanel, CollapsingHeader, Color32, Context, RichText, ScrollArea, SidePanel, Style, Vec2};
 use eframe::egui::panel::Side;
 use eframe::egui::WidgetType::SelectableLabel;
 use egui_file::FileDialog;
@@ -13,11 +14,13 @@ use tokio::sync::mpsc::error::TryRecvError;
 use crate::launch::{Device, LaunchOptions};
 use crate::manager::{ManagerCommand, ManagerEvent};
 use crate::ui::manager::launcher::{launcher_dialog, launcher_ui, LauncherState};
+use crate::ui::manager::tests::{test_ui, TestState};
 use crate::utils::{handle_error, selectable_value_with_size};
 
 pub struct UIManagerState {
     current_tab: ManagerTabs,
     launcher_state: LauncherState,
+    test_state: TestState,
 }
 
 impl Default for UIManagerState {
@@ -25,6 +28,7 @@ impl Default for UIManagerState {
         Self {
             current_tab: ManagerTabs::Launcher,
             launcher_state: Default::default(),
+            test_state: Default::default(),
         }
     }
 }
@@ -137,7 +141,12 @@ pub fn manager_ui(state: &mut UIManagerState, ctx: &Context, toasts: &mut Toasts
                         ManagerTabs::InstalledMods => {}
                         ManagerTabs::ModSettings => {}
                         ManagerTabs::GetMods => {}
-                        ManagerTabs::Settings => {}
+                        ManagerTabs::Settings => {
+                            CollapsingHeader::new("Tests")
+                                .show(ui, |ui| {
+                                    test_ui(state, ui, toasts, command, event);
+                                });
+                        }
                     }
                 });
 

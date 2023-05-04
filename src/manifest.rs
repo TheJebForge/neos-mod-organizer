@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
+use crate::version::{Version, VersionReq};
 
 pub async fn download_manifest(url: &str) -> Result<ModManifest, ManifestDownloadError> {
     Ok(reqwest::get(url)
@@ -33,7 +34,7 @@ impl From<reqwest::Error> for ManifestDownloadError {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ModManifest {
-    schema_version: String,
+    schema_version: Version,
     mods: HashMap<GUID, Mod>
 }
 
@@ -51,7 +52,7 @@ pub struct Mod {
     tags: Option<Vec<String>>,
     category: Category,
     flags: Option<Vec<String>>,
-    versions: HashMap<String, ModVersion>
+    versions: HashMap<Version, ModVersion>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -60,8 +61,8 @@ pub struct ModVersion {
     changelog: Option<String>,
     #[serde(rename = "releaseURL")]
     release_url: Option<String>,
-    neos_version_compatibility: Option<String>,
-    modloader_version_compatibility: Option<String>,
+    neos_version_compatibility: Option<VersionReq>,
+    modloader_version_compatibility: Option<VersionReq>,
     flags: Option<Vec<String>>,
     conflicts: Option<HashMap<GUID, Conflict>>,
     dependencies: Option<HashMap<GUID, Dependency>>,
@@ -71,13 +72,13 @@ pub struct ModVersion {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Conflict {
-    version: String
+    version: VersionReq
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Dependency {
-    version: String
+    version: VersionReq
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
