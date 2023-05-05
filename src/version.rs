@@ -8,11 +8,91 @@ use serde::de::Visitor;
 
 #[derive(Debug, Hash, Clone)]
 pub struct Version {
-    pub major: u16,
-    pub minor: Option<u16>,
-    pub patch: Option<u16>,
-    pub revision: Option<u16>,
+    major: u16,
+    minor: Option<u16>,
+    patch: Option<u16>,
+    revision: Option<u16>,
     pub suffix: Option<String>
+}
+
+impl Version {
+    pub fn from_major(major: u16) -> Self {
+        Self {
+            major,
+            minor: None,
+            patch: None,
+            revision: None,
+            suffix: None,
+        }
+    }
+
+    pub fn from_minor(major: u16, minor: u16) -> Self {
+        Self {
+            major,
+            minor: Some(minor),
+            patch: None,
+            revision: None,
+            suffix: None,
+        }
+    }
+
+    pub fn from_patch(major: u16, minor: u16, patch: u16) -> Self {
+        Self {
+            major,
+            minor: Some(minor),
+            patch: Some(patch),
+            revision: None,
+            suffix: None,
+        }
+    }
+
+    pub fn from_revision(major: u16, minor: u16, patch: u16, revision: u16) -> Self {
+        Self {
+            major,
+            minor: Some(minor),
+            patch: Some(patch),
+            revision: Some(revision),
+            suffix: None,
+        }
+    }
+
+    pub fn from_suffix(major: u16, minor: u16, patch: u16, revision: u16, suffix: &str) -> Self {
+        Self {
+            major,
+            minor: Some(minor),
+            patch: Some(patch),
+            revision: Some(revision),
+            suffix: Some(suffix.to_string()),
+        }
+    }
+
+    pub fn has_revision(&self) -> bool {
+        self.revision.is_some()
+    }
+
+    pub fn revision(&self) -> u16 {
+        self.revision.unwrap_or_else(|| 0)
+    }
+
+    pub fn has_patch(&self) -> bool {
+        self.patch.is_some()
+    }
+
+    pub fn patch(&self) -> u16 {
+        self.patch.unwrap_or_else(|| 0)
+    }
+
+    pub fn has_minor(&self) -> bool {
+        self.minor.is_some()
+    }
+
+    pub fn minor(&self) -> u16 {
+        self.minor.unwrap_or_else(|| 0)
+    }
+
+    pub fn major(&self) -> u16 {
+        self.major
+    }
 }
 
 impl Default for Version {
@@ -146,6 +226,161 @@ impl FromStr for Version {
 pub struct VersionReq {
     version: Version,
     op: VersionOp
+}
+
+impl VersionReq {
+    pub fn matches(&self, version: &Version) -> bool {
+        match self.op {
+            VersionOp::Exact | VersionOp::Wildcard => {
+                match () {
+                    _ if self.version.has_revision() => {
+                        version == &self.version
+                    }
+
+                    _ if self.version.has_patch() => {
+                        let patch = self.version.patch();
+
+                        version >= &Version::from_patch(self.version.major, self.version.minor(), patch)
+                            && version < &Version::from_patch(self.version.major, self.version.minor(), patch + 1)
+                    }
+
+                    _ if self.version.has_minor() => {
+                        let minor = self.version.minor();
+
+                        version >= &Version::from_minor(self.version.major, minor)
+                            && version < &Version::from_minor(self.version.major, minor + 1)
+                    }
+
+                    _ => {
+                        version >= &Version::from_major(self.version.major)
+                            && version < &Version::from_major(self.version.major + 1)
+                    }
+                }
+            }
+
+            VersionOp::Greater => {
+                match () {
+                    _ if self.version.has_revision() => {
+                        version > &self.version
+                    }
+
+                    _ if self.version.has_patch() => {
+                        version >= &Version::from_patch(self.version.major(), self.version.minor(), self.version.patch() + 1)
+                    }
+
+                    _ if self.version.has_minor() => {
+                        version >= &Version::from_minor(self.version.major(), self.version.minor() + 1)
+                    }
+
+                    _ => {
+                        version >= &Version::from_major(self.version.major + 1)
+                    }
+                }
+            }
+
+            VersionOp::GreaterEq => {
+                version >= &self.version
+            }
+
+            VersionOp::Less => {
+                version < &self.version
+            }
+
+            VersionOp::LessEq => {
+                match () {
+                    _ if self.version.has_revision() => {
+                        version < &self.version
+                    }
+
+                    _ if self.version.has_patch() => {
+                        version < &Version::from_patch(self.version.major(), self.version.minor(), self.version.patch() + 1)
+                    }
+
+                    _ if self.version.has_minor() => {
+                        version < &Version::from_minor(self.version.major(), self.version.minor() + 1)
+                    }
+
+                    _ => {
+                        version < &Version::from_major(self.version.major + 1)
+                    }
+                }
+            }
+
+            VersionOp::Tilde => {
+                match () {
+                    _ if self.version.has_revision() => {
+                        let minor = self.version.minor();
+
+                        version >= &Version::from_revision(self.version.major, minor, self.version.patch(), self.version.revision())
+                            && version < &Version::from_minor(self.version.major, minor + 1)
+                    }
+
+                    _ if self.version.has_patch() => {
+                        let minor = self.version.minor();
+
+                        version >= &Version::from_patch(self.version.major, minor, self.version.patch())
+                            && version < &Version::from_minor(self.version.major, minor + 1)
+                    }
+
+                    _ if self.version.has_minor() => {
+                        let minor = self.version.minor();
+
+                        version >= &Version::from_minor(self.version.major, minor)
+                            && version < &Version::from_minor(self.version.major, minor + 1)
+                    }
+
+                    _ => {
+                        version >= &Version::from_major(self.version.major)
+                            && version < &Version::from_major(self.version.major + 1)
+                    }
+                }
+            }
+
+            VersionOp::Caret => {
+                match () {
+                    _ if self.version.major() > 0 && self.version.has_revision() => {
+                        version >= &self.version
+                            && version < &Version::from_major(self.version.major() + 1)
+                    }
+
+                    _ if self.version.minor() > 0 => {
+                        version >= &self.version
+                            && version < &Version::from_minor(0, self.version.minor() + 1)
+                    }
+
+                    _ if self.version.patch() > 0 => {
+                        version >= &self.version
+                            && version < &Version::from_patch(0, 0, self.version.patch() + 1)
+                    }
+
+                    _ if self.version.has_revision() => {
+                        version == &self.version
+                    }
+
+                    _ if self.version.has_patch() => {
+                        let patch = self.version.patch();
+
+                        version >= &Version::from_patch(self.version.major, self.version.minor(), patch)
+                            && version < &Version::from_patch(self.version.major, self.version.minor(), patch + 1)
+                    }
+
+                    _ if self.version.has_minor() => {
+                        let minor = self.version.minor();
+
+                        version >= &Version::from_minor(self.version.major, minor)
+                            && version < &Version::from_minor(self.version.major, minor + 1)
+                    }
+
+                    _ => {
+                        version >= &Version::from_major(self.version.major)
+                            && version < &Version::from_major(self.version.major + 1)
+                    }
+                }
+            }
+
+            VersionOp::WildcardAny => true,
+        }
+    }
 }
 
 impl FromStr for VersionReq {
@@ -291,12 +526,12 @@ pub enum VersionOp {
     /// - `^A` - same as `=A`
     Caret,
 
-    /// `A.I.P.*` - same as `=A.I.P`
-    /// `A.I.*` or `A.I.*.*` - same as `=A.I`
-    /// `A.*` or `A.*.*` or `A.*.*.*` - same as `=A`
+    /// - `A.I.P.*` - same as `=A.I.P`
+    /// - `A.I.*` or `A.I.*.*` - same as `=A.I`
+    /// - `A.*` or `A.*.*` or `A.*.*.*` - same as `=A`
     Wildcard,
 
-    /// `*` - same as `>=0.0.0.0`
+    /// - `*` - same as `>=0.0.0.0`
     WildcardAny,
 }
 

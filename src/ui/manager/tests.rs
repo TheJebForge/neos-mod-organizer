@@ -13,6 +13,8 @@ pub struct TestState {
     result: String,
     req: String,
     req_result: String,
+    req_version: String,
+    matches: String
 }
 
 pub fn test_ui(state: &mut UIManagerState, ui: &mut Ui, toasts: &mut Toasts, command: &Sender<ManagerCommand>, event: &mut Receiver<ManagerEvent>) {
@@ -35,7 +37,7 @@ pub fn test_ui(state: &mut UIManagerState, ui: &mut Ui, toasts: &mut Toasts, com
     }
     ui.label(&state.test_state.result);
 
-    ui.add_space(10.0);
+    ui.separator();
 
     ui.label("Version requirement parse test");
     ui.text_edit_singleline(&mut state.test_state.req);
@@ -50,4 +52,21 @@ pub fn test_ui(state: &mut UIManagerState, ui: &mut Ui, toasts: &mut Toasts, com
         state.test_state.req_result = format!("result: {:#?}\ntext: {}", req, text)
     }
     ui.label(&state.test_state.req_result);
+
+    ui.label("Version to match");
+    ui.text_edit_singleline(&mut state.test_state.req_version);
+    if ui.button("match").clicked() {
+        let text = if let Ok(req) = VersionReq::from_str(&state.test_state.req) {
+            if let Ok(ver) = Version::from_str(&state.test_state.req_version) {
+                format!("matches: {}", req.matches(&ver))
+            } else {
+                format!("invalid version")
+            }
+        } else {
+            format!("invalid requirement")
+        };
+
+        state.test_state.matches = text;
+    }
+    ui.label(&state.test_state.matches);
 }
