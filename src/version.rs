@@ -222,7 +222,7 @@ impl FromStr for Version {
     }
 }
 
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct VersionReq {
     version: Version,
     op: VersionOp
@@ -338,7 +338,7 @@ impl VersionReq {
 
             VersionOp::Caret => {
                 match () {
-                    _ if self.version.major() > 0 && self.version.has_revision() => {
+                    _ if self.version.major() > 0 => {
                         version >= &self.version
                             && version < &Version::from_major(self.version.major() + 1)
                     }
@@ -353,27 +353,8 @@ impl VersionReq {
                             && version < &Version::from_patch(0, 0, self.version.patch() + 1)
                     }
 
-                    _ if self.version.has_revision() => {
-                        version == &self.version
-                    }
-
-                    _ if self.version.has_patch() => {
-                        let patch = self.version.patch();
-
-                        version >= &Version::from_patch(self.version.major, self.version.minor(), patch)
-                            && version < &Version::from_patch(self.version.major, self.version.minor(), patch + 1)
-                    }
-
-                    _ if self.version.has_minor() => {
-                        let minor = self.version.minor();
-
-                        version >= &Version::from_minor(self.version.major, minor)
-                            && version < &Version::from_minor(self.version.major, minor + 1)
-                    }
-
                     _ => {
-                        version >= &Version::from_major(self.version.major)
-                            && version < &Version::from_major(self.version.major + 1)
+                        version == &self.version
                     }
                 }
             }
@@ -475,7 +456,7 @@ impl Display for VersionReq {
     }
 }
 
-#[derive(Debug, Hash, Copy, Clone)]
+#[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
 pub enum VersionOp {
     /// - `=A.I.P.R` - exactly version A.I.P.R
     /// - `=A.I.P` - same as `>=A.I.P.0, <A.I.(P+1).0`

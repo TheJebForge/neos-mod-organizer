@@ -7,6 +7,12 @@ mod utils;
 mod launch;
 mod manifest;
 mod version;
+mod install;
+mod resolver;
+
+#[cfg(test)]
+mod tests;
+
 
 use std::path::PathBuf;
 use std::str::FromStr;

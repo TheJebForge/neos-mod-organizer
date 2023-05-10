@@ -1,12 +1,17 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use crate::config::Config;
+use crate::install::{ModFile, ModInstallOperations};
 use crate::launch::LaunchOptions;
-use crate::manifest::download_manifest;
+use crate::manifest::{Artifact, Category, Dependency, download_manifest, Mod, ModVersion};
+use crate::resolver::{find_latest_matching, resolve_install_mod, ResolveResult};
+use crate::version::{Version, VersionReq};
 
 pub fn validate_path(path: &PathBuf) -> bool {
     let Some(dir) = path.parent() else {
@@ -52,6 +57,72 @@ impl Manager {
 
         let manifest = download_manifest("https://raw.githubusercontent.com/neos-modding-group/neos-mod-manifest/master/manifest.json").await.unwrap();
         println!("{:#?}", manifest);
+
+        let current = HashMap::from([
+            (format!("dev.zkxs.neosmodloader"), vec![
+                ModFile::new("dev.zkxs.neosmodloader", Mod {
+                    name: format!("Test Mod 1"),
+                    color: None,
+                    description: format!("Testing things and how they work"),
+                    authors: Default::default(),
+                    source_location: None,
+                    website: None,
+                    tags: None,
+                    category: Category::AssetImportingTweaks,
+                    flags: None,
+                    versions: HashMap::from([
+                        (Version::from_patch(1, 12, 5), ModVersion {
+                            changelog: None,
+                            release_url: None,
+                            neos_version_compatibility: None,
+                            modloader_version_compatibility: None,
+                            flags: None,
+                            conflicts: None,
+                            dependencies: Some(HashMap::from([
+                                (format!("test.mod.dep"), Dependency {
+                                    version: VersionReq::from_str("1").unwrap(),
+                                })
+                            ])),
+                            artifacts: vec![
+                                Artifact {
+                                    url: "test.com/test.dll".to_string(),
+                                    filename: None,
+                                    sha256: "135153".to_string(),
+                                    blake3: None,
+                                    install_location: None,
+                                }
+                            ],
+                        })
+                    ]),
+                }, Version::from_patch(1, 12, 5))
+            ])
+        ]);
+
+        let op_result = resolve_install_mod(
+            "dev.zkxs.neosmodloader",
+            &VersionReq::from_str("*").unwrap(),
+            &current,
+            &manifest.mods
+        );
+
+        let ops = match op_result {
+            ResolveResult::Ok(ops) => ops,
+            ResolveResult::UnableToFind { mod_id, requirement } => {
+                println!("Couldn't find {mod_id}@{requirement}");
+                vec![]
+            }
+        };
+
+        for op in ops {
+            match op {
+                ModInstallOperations::InstallMod { mod_id, info, version } => {
+                    println!("Install {mod_id}@{version}");
+                }
+                ModInstallOperations::UninstallMod( file ) => {
+                    println!("Uninstall {}@{}", file.mod_id, file.version.map_or_else(|| "?".to_string(), |x| x.to_string()))
+                }
+            }
+        }
 
         loop {
             if let Some(command) = self.command_receiver.recv().await {

@@ -119,3 +119,17 @@ pub fn validation_text_field_with_label<T: FromStr>(ui: &mut Ui, label: impl Int
         out
     }).inner
 }
+
+pub fn find_filename_from_url(url: &str, ends_with: &str) -> Option<String> {
+    if !url.ends_with(ends_with) {
+        return None;
+    }
+
+    let index = url.rfind('/')?;
+
+    if index + 1 >= url.len() {
+        return None;
+    }
+
+    Some(url[(index + 1)..].to_string())
+}

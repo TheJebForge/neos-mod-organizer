@@ -1501,6 +1501,7 @@ dependencies = [
 name = "neos-mod-organizer"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "dirs 5.0.0",
  "eframe",
  "egui-toast",
