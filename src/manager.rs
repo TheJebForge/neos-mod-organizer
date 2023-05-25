@@ -1,16 +1,22 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
+use arc_swap::ArcSwap;
+use eframe::egui::RichText;
+use egui_toast::ToastKind;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
-use tokio::time::sleep;
+use tokio::time::{Instant, sleep};
 use crate::config::Config;
-use crate::install::{ModFile, ModInstallOperations};
+use crate::install::{ActualInstall, ModFile, ModInstall, ModInstallOperations, ModMap};
 use crate::launch::LaunchOptions;
-use crate::manifest::{Artifact, Category, Dependency, download_manifest, Mod, ModVersion};
+use crate::manifest::{aggregate_manifests, Artifact, Category, Dependency, download_manifest, GlobalModList, Mod, ModVersion};
 use crate::resolver::{find_latest_matching, resolve_install_mod, ResolveResult};
+use crate::utils::{get_all_files_of_extension, sha256_file};
 use crate::version::{Version, VersionReq};
 
 pub fn validate_path(path: &PathBuf) -> bool {
@@ -40,88 +46,51 @@ pub fn validate_path(path: &PathBuf) -> bool {
 pub struct Manager {
     command_receiver: Receiver<ManagerCommand>,
     event_sender: Sender<ManagerEvent>,
-    config: Config
+    config: Arc<ArcSwap<Config>>,
+    global_mods: GlobalModList,
+    install: ActualInstall
 }
 
 impl Manager {
-    pub fn new(receiver: Receiver<ManagerCommand>, sender: Sender<ManagerEvent>, config: Config) -> Self {
+    pub fn new(receiver: Receiver<ManagerCommand>, sender: Sender<ManagerEvent>, config: Arc<ArcSwap<Config>>, global_mods: GlobalModList) -> Self {
+        let config_str = config.load_full();
+
         Self {
             command_receiver: receiver,
             event_sender: sender,
             config,
+            global_mods: global_mods.clone(),
+            install: ActualInstall::new_empty(&config_str.neos_exe_location.parent().unwrap(), global_mods),
         }
     }
 
     pub async fn run_event_loop(&mut self) {
-        self.event_sender.send(ManagerEvent::LaunchOptionsState(self.config.launch_options.clone())).await.expect("Failed");
+        self.event_sender.send(ManagerEvent::LaunchOptionsState(self.config.load().launch_options.clone())).await.expect("Failed");
 
-        let manifest = download_manifest("https://raw.githubusercontent.com/neos-modding-group/neos-mod-manifest/master/manifest.json").await.unwrap();
-        println!("{:#?}", manifest);
+        // Get the manifest
+        let time = Instant::now();
+        let config = self.config.load();
 
-        let current = HashMap::from([
-            (format!("dev.zkxs.neosmodloader"), vec![
-                ModFile::new("dev.zkxs.neosmodloader", Mod {
-                    name: format!("Test Mod 1"),
-                    color: None,
-                    description: format!("Testing things and how they work"),
-                    authors: Default::default(),
-                    source_location: None,
-                    website: None,
-                    tags: None,
-                    category: Category::AssetImportingTweaks,
-                    flags: None,
-                    versions: HashMap::from([
-                        (Version::from_patch(1, 12, 5), ModVersion {
-                            changelog: None,
-                            release_url: None,
-                            neos_version_compatibility: None,
-                            modloader_version_compatibility: None,
-                            flags: None,
-                            conflicts: None,
-                            dependencies: Some(HashMap::from([
-                                (format!("test.mod.dep"), Dependency {
-                                    version: VersionReq::from_str("1").unwrap(),
-                                })
-                            ])),
-                            artifacts: vec![
-                                Artifact {
-                                    url: "test.com/test.dll".to_string(),
-                                    filename: None,
-                                    sha256: "135153".to_string(),
-                                    blake3: None,
-                                    install_location: None,
-                                }
-                            ],
-                        })
-                    ]),
-                }, Version::from_patch(1, 12, 5))
-            ])
-        ]);
+        let (mods, errors) = aggregate_manifests(config.manifest_links.as_ref()).await;
 
-        let op_result = resolve_install_mod(
-            "dev.zkxs.neosmodloader",
-            &VersionReq::from_str("*").unwrap(),
-            &current,
-            &manifest.mods
-        );
+        for (url, error) in errors {
+            self.event_sender.send(ManagerEvent::LongNotification(
+                ToastKind::Error,
+                format!("Reading manifest \"{}\" failed, error:\n{}", url, error)
+            )).await.ok();
+        }
 
-        let ops = match op_result {
-            ResolveResult::Ok(ops) => ops,
-            ResolveResult::UnableToFind { mod_id, requirement } => {
-                println!("Couldn't find {mod_id}@{requirement}");
-                vec![]
-            }
-        };
+        let len = mods.len();
+        self.global_mods.update_list(mods);
 
-        for op in ops {
-            match op {
-                ModInstallOperations::InstallMod { mod_id, info, version } => {
-                    println!("Install {mod_id}@{version}");
-                }
-                ModInstallOperations::UninstallMod( file ) => {
-                    println!("Uninstall {}@{}", file.mod_id, file.version.map_or_else(|| "?".to_string(), |x| x.to_string()))
-                }
-            }
+        self.event_sender.send(ManagerEvent::Notification(ToastKind::Success, format!("Downloaded info about {} mods in {}ms", len, time.elapsed().as_millis()))).await.ok();
+
+        // Rescan mods
+        let time = Instant::now();
+
+        if let Some(_) = handle_error(self.install.rescan_mods(self.config.load_full()).await, &self.event_sender).await {
+            self.event_sender.send(ManagerEvent::ModMapChanged(self.install.mod_map().clone())).await.ok();
+            self.event_sender.send(ManagerEvent::Notification(ToastKind::Success, format!("Found {} mods in {}ms", self.install.mod_map().len(), time.elapsed().as_millis()))).await.ok();
         }
 
         loop {
@@ -129,22 +98,23 @@ impl Manager {
                 match command {
                     ManagerCommand::Test => {println!("test")}
                     ManagerCommand::LaunchNeos => {
-                        let mut command = self.config.launch_options.build_command(&self.config.neos_location);
+                        let mut command = self.config.load().launch_options.build_command(&self.config.load().neos_exe_location);
 
                         handle_error(command.spawn(), &self.event_sender).await;
                     }
 
                     ManagerCommand::CreateShortcut(path) => {
                         #[cfg(target_os="windows")]
-                        handle_error(self.config.launch_options.make_shortcut(&self.config.neos_location, path), &self.event_sender).await;
+                        handle_error(self.config.load().launch_options.make_shortcut(&self.config.load().neos_exe_location, path), &self.event_sender).await;
                         #[cfg(not(target_os="windows"))]
                         self.event_sender.send(ManagerEvent::Error(format!("Cannot create shortcut\nmslnk wasn't compiled due to compilation target"))).await.ok();
                     }
 
-                    ManagerCommand::SetLaunchOptions(options) => {
-                        self.config.launch_options = options;
-                        handle_error(self.config.save_config().await, &self.event_sender).await;
+                    ManagerCommand::SaveConfig => {
+                        handle_error(self.config.load().save_config().await, &self.event_sender).await;
                     }
+                    ManagerCommand::RefreshModMap => {}
+                    ManagerCommand::RefreshManifests => {}
                 }
             }
         }
@@ -166,14 +136,19 @@ async fn handle_error<T, E: Error>(result: Result<T, E>, sender: &Sender<Manager
 #[derive(Debug)]
 pub enum ManagerCommand {
     Test,
-    SetLaunchOptions(LaunchOptions),
+    SaveConfig,
     LaunchNeos,
-    CreateShortcut(PathBuf)
+    CreateShortcut(PathBuf),
+    RefreshManifests,
+    RefreshModMap
 }
 
 /// For communication from Manager to UI
 #[derive(Debug)]
 pub enum ManagerEvent {
     LaunchOptionsState(LaunchOptions),
+    ModMapChanged(ModMap),
+    Notification(ToastKind, String),
+    LongNotification(ToastKind, String),
     Error(String)
 }

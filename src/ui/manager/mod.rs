@@ -1,9 +1,11 @@
 mod launcher;
 mod tests;
+mod mod_list;
 
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
+use arc_swap::ArcSwap;
 use eframe::egui::{Button, CentralPanel, CollapsingHeader, Color32, Context, RichText, ScrollArea, SidePanel, Style, Vec2};
 use eframe::egui::panel::Side;
 use eframe::egui::WidgetType::SelectableLabel;
@@ -11,26 +13,23 @@ use egui_file::FileDialog;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::mpsc::error::TryRecvError;
+use crate::config::Config;
+use crate::install::ModMap;
 use crate::launch::{Device, LaunchOptions};
 use crate::manager::{ManagerCommand, ManagerEvent};
+use crate::manifest::GlobalModList;
 use crate::ui::manager::launcher::{launcher_dialog, launcher_ui, LauncherState};
+use crate::ui::manager::mod_list::{mod_list_ui, ModListState};
 use crate::ui::manager::tests::{test_ui, TestState};
 use crate::utils::{handle_error, selectable_value_with_size};
 
 pub struct UIManagerState {
-    current_tab: ManagerTabs,
-    launcher_state: LauncherState,
-    test_state: TestState,
-}
-
-impl Default for UIManagerState {
-    fn default() -> Self {
-        Self {
-            current_tab: ManagerTabs::Launcher,
-            launcher_state: Default::default(),
-            test_state: Default::default(),
-        }
-    }
+    pub(crate) current_tab: ManagerTabs,
+    pub(crate) launcher_state: LauncherState,
+    pub(crate) mod_list_state: ModListState,
+    pub(crate) test_state: TestState,
+    pub(crate) manifest_mods: GlobalModList,
+    pub(crate) mod_list: ModMap
 }
 
 fn handle_events(state: &mut UIManagerState, toasts: &mut Toasts, event_r: &mut Receiver<ManagerEvent>) {
@@ -51,13 +50,38 @@ fn handle_events(state: &mut UIManagerState, toasts: &mut Toasts, event_r: &mut 
                     state.launcher_state.aptive_sharpness_str = options.ctaa.as_ref().map_or_else(|| "".to_string(), |x| x.aptive_sharpness.as_ref().map_or_else(|| "".to_string(), |x| x.to_string()));
                     state.launcher_state.cached_launch_options = (options, false);
                 }
+
                 ManagerEvent::Error(error) => {
                     toasts.add(Toast {
                         kind: ToastKind::Error,
                         text: format!("Manager error\n{}", error).into(),
                         options: ToastOptions::default()
                             .show_progress(true)
-                            .duration_in_seconds(5.0),
+                            .duration_in_seconds(30.0),
+                    });
+                }
+
+                ManagerEvent::ModMapChanged(map) => {
+                    state.mod_list = map;
+                }
+
+                ManagerEvent::Notification(kind, message) => {
+                    toasts.add(Toast {
+                        kind,
+                        text: message.into(),
+                        options: ToastOptions::default()
+                            .show_progress(true)
+                            .duration_in_seconds(5.0)
+                    });
+                }
+
+                ManagerEvent::LongNotification(kind, message) => {
+                    toasts.add(Toast {
+                        kind,
+                        text: message.into(),
+                        options: ToastOptions::default()
+                            .show_progress(true)
+                            .duration_in_seconds(30.0)
                     });
                 }
             }
@@ -79,12 +103,11 @@ pub enum ManagerTabs {
     Updates,
     ModLoader,
     InstalledMods,
-    ModSettings,
     GetMods,
     Settings
 }
 
-pub fn manager_ui(state: &mut UIManagerState, ctx: &Context, toasts: &mut Toasts, command: &Sender<ManagerCommand>, event: &mut Receiver<ManagerEvent>, alt_style: Arc<Style>) {
+pub fn manager_ui(state: &mut UIManagerState, config: &Arc<ArcSwap<Config>>, ctx: &Context, toasts: &mut Toasts, command: &Sender<ManagerCommand>, event: &mut Receiver<ManagerEvent>, alt_style: Arc<Style>) {
     handle_events(state, toasts, event);
 
     let normal = ctx.style();
@@ -104,7 +127,6 @@ pub fn manager_ui(state: &mut UIManagerState, ctx: &Context, toasts: &mut Toasts
                     (ManagerTabs::Updates, "↻ Updates"),
                     (ManagerTabs::ModLoader, "Ｎ Neos Mod Loader"),
                     (ManagerTabs::InstalledMods, "📦 Installed Mods"),
-                    (ManagerTabs::ModSettings, "⛭ Mod Settings"),
                     (ManagerTabs::GetMods, "⬇ Get More Mods"),
                     (ManagerTabs::Settings, "🛠 Settings")
                 ];
@@ -130,7 +152,7 @@ pub fn manager_ui(state: &mut UIManagerState, ctx: &Context, toasts: &mut Toasts
                 .show(ui, |ui| {
                     match state.current_tab {
                         ManagerTabs::Launcher => {
-                            launcher_ui(state, ui, ctx, toasts, command);
+                            launcher_ui(state, config, ui, ctx, toasts, command);
                         }
                         ManagerTabs::Updates => {
                             ui.heading("Updates here");
@@ -138,8 +160,9 @@ pub fn manager_ui(state: &mut UIManagerState, ctx: &Context, toasts: &mut Toasts
                         ManagerTabs::ModLoader => {
                             ui.heading("modloader");
                         }
-                        ManagerTabs::InstalledMods => {}
-                        ManagerTabs::ModSettings => {}
+                        ManagerTabs::InstalledMods => {
+                            mod_list_ui(state, config, ui, ctx, toasts, command);
+                        }
                         ManagerTabs::GetMods => {}
                         ManagerTabs::Settings => {
                             CollapsingHeader::new("Tests")

@@ -14,10 +14,11 @@ mod resolver;
 mod tests;
 
 
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
+use arc_swap::ArcSwap;
 use eframe::{App, CreationContext, Frame, NativeOptions, run_native};
 use eframe::egui::{Align2, CentralPanel, Color32, Context, Direction, FontId, Style, TextStyle, Vec2, Window};
 use eframe::egui::FontFamily;
@@ -29,15 +30,16 @@ use tokio::time::Instant;
 use manager::{ManagerCommand, ManagerEvent};
 use crate::config::{Config, ConfigError};
 use crate::manager::{Manager, validate_path};
+use crate::manifest::GlobalModList;
 use crate::ui::first_time::{first_time_ui, FirstTimeState};
-use crate::ui::manager::{manager_ui, UIManagerState};
+use crate::ui::manager::{manager_ui, ManagerTabs, UIManagerState};
 use crate::version::Version;
 
 
 fn main() {
     let mut native_options = NativeOptions::default();
 
-    native_options.min_window_size = Some(Vec2::new(800.0, 600.0));
+    native_options.min_window_size = Some(Vec2::new(900.0, 700.0));
 
     run_native(
         "Neos Mod Organizer",
@@ -54,7 +56,10 @@ pub struct UIApp {
     popup: Option<(String, Instant)>,
     manager_commander: Option<Sender<ManagerCommand>>,
     manager_events: Option<Receiver<ManagerEvent>>,
-    alt_style: Arc<Style>
+    alt_style: Arc<Style>,
+    config: Option<Arc<ArcSwap<Config>>>,
+
+    reset_timer: Instant
 }
 
 pub enum UIState {
@@ -64,11 +69,11 @@ pub enum UIState {
 }
 
 impl UIApp {
-    fn init_manager(&mut self, config: Config) {
+    fn init_manager(&mut self, global_mods: GlobalModList) {
         let (command_s, command_r) = mpsc::channel::<ManagerCommand>(15);
         let (event_s, event_r) = mpsc::channel::<ManagerEvent>(15);
 
-        let mut manager = Manager::new(command_r, event_s, config);
+        let mut manager = Manager::new(command_r, event_s, self.config.clone().unwrap(), global_mods);
 
         thread::spawn(move || {
             runtime::Builder::new_multi_thread()
@@ -115,17 +120,28 @@ impl UIApp {
 
         match Config::load_config_sync() {
             Ok(c) => {
-                if validate_path(&c.neos_location) {
+                if validate_path(&c.neos_exe_location) {
+                    let mods = GlobalModList::empty();
+
                     let mut instance = Self {
                         toast,
-                        state: UIState::Manager(UIManagerState::default()),
+                        state: UIState::Manager(UIManagerState {
+                            current_tab: ManagerTabs::Launcher,
+                            launcher_state: Default::default(),
+                            mod_list_state: Default::default(),
+                            test_state: Default::default(),
+                            manifest_mods: mods.clone(),
+                            mod_list: Default::default(),
+                        }),
                         popup: None,
                         manager_commander: None,
                         manager_events: None,
                         alt_style: Arc::new(alternative_bg),
+                        config: Some(Arc::new(ArcSwap::new(Arc::new(c)))),
+                        reset_timer: Instant::now(),
                     };
 
-                    instance.init_manager(c);
+                    instance.init_manager(mods);
 
                     instance
                 } else {
@@ -149,6 +165,8 @@ impl UIApp {
                         manager_commander: None,
                         manager_events: None,
                         alt_style: Arc::new(alternative_bg),
+                        config: None,
+                        reset_timer: Instant::now(),
                     }
                 }
             }
@@ -162,6 +180,8 @@ impl UIApp {
                             manager_commander: None,
                             manager_events: None,
                             alt_style: Arc::new(alternative_bg),
+                            config: None,
+                            reset_timer: Instant::now(),
                         }
                     }
                     _ => {
@@ -172,6 +192,8 @@ impl UIApp {
                             manager_commander: None,
                             manager_events: None,
                             alt_style: Arc::new(alternative_bg),
+                            config: None,
+                            reset_timer: Instant::now(),
                         }
                     }
                 }
@@ -184,10 +206,23 @@ impl App for UIApp {
     fn update(&mut self, ctx: &Context, frame: &mut Frame) {
         if let UIState::FirstTime(state) = &mut self.state {
             if let Some(config) = first_time_ui(state, ctx, &mut self.toast) {
-                match config.save_config_sync() {
+                let config = Arc::new(ArcSwap::new(Arc::new(config)));
+
+                self.config = Some(config.clone());
+
+                let mods = GlobalModList::empty();
+
+                match config.load().save_config_sync() {
                     Ok(_) => {
-                        self.init_manager(config);
-                        self.state = UIState::Manager(UIManagerState::default());
+                        self.init_manager(mods.clone());
+                        self.state = UIState::Manager(UIManagerState {
+                            current_tab: ManagerTabs::Launcher,
+                            launcher_state: Default::default(),
+                            mod_list_state: Default::default(),
+                            test_state: Default::default(),
+                            manifest_mods: mods,
+                            mod_list: Default::default(),
+                        });
                     }
                     Err(e) => {
                         self.toast.add(Toast {
@@ -204,7 +239,7 @@ impl App for UIApp {
             match &mut self.state {
                 UIState::Manager(state) => {
                     if self.manager_events.is_some() && self.manager_commander.is_some() {
-                        manager_ui(state, ctx, &mut self.toast, self.manager_commander.as_ref().unwrap(), self.manager_events.as_mut().unwrap(), self.alt_style.clone());
+                        manager_ui(state, self.config.as_ref().unwrap(), ctx, &mut self.toast, self.manager_commander.as_ref().unwrap(), self.manager_events.as_mut().unwrap(), self.alt_style.clone());
                     }
                 }
                 UIState::CompleteError(str) => {

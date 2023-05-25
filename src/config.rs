@@ -9,8 +9,27 @@ use crate::launch::LaunchOptions;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub neos_location: PathBuf,
+    pub neos_exe_location: PathBuf,
+    #[serde(default)]
     pub launch_options: LaunchOptions,
+    #[serde(default = "default_scan_locations")]
+    pub scan_locations: Vec<PathBuf>,
+    #[serde(default = "default_manifest_links")]
+    pub manifest_links: Vec<String>
+}
+
+pub fn default_scan_locations() -> Vec<PathBuf> {
+    vec![
+        PathBuf::from("/Libraries"),
+        PathBuf::from("/nml_libs"),
+        PathBuf::from("/nml_mods")
+    ]
+}
+
+pub fn default_manifest_links() -> Vec<String> {
+    vec![
+        format!("https://raw.githubusercontent.com/neos-modding-group/neos-mod-manifest/master/manifest.json")
+    ]
 }
 
 impl Config {

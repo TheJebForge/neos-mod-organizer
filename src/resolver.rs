@@ -33,7 +33,7 @@ pub fn resolve_install_mod(mod_id: &str, requirement: &VersionReq, current_insta
     while let Some((mod_id, requirement)) = queue.pop_back() {
         let mut piece = vec![];
 
-        let Some((mod_info, version, version_info)) = find_latest_matching(mod_id, requirement, mod_list) else {
+        let Some((_, version, version_info)) = find_latest_matching(mod_id, requirement, mod_list) else {
             return ResolveResult::UnableToFind {
                 mod_id: mod_id.to_string(),
                 requirement: requirement.clone()
@@ -41,22 +41,16 @@ pub fn resolve_install_mod(mod_id: &str, requirement: &VersionReq, current_insta
         };
 
         if let Some(installed_versions) = current_install.get(mod_id) {
-            if installed_versions.iter().any(|x| x.version.is_some() && requirement.matches(x.version.as_ref().unwrap()) && x.version.as_ref().unwrap() >= version) {
+            if installed_versions.iter().any(|(v, _)| requirement.matches(v) && v >= version) {
                 continue;
             } else {
-                for version in installed_versions {
-                    piece.push(ModInstallOperations::UninstallMod(version.clone()));
+                for (version, _) in installed_versions {
+                    piece.push(ModInstallOperations::UninstallMod((mod_id.to_string(), version.clone())));
                 }
             }
         }
 
-
-
-        piece.push(ModInstallOperations::InstallMod {
-            mod_id: mod_id.to_string(),
-            info: mod_info.clone(),
-            version: version.clone(),
-        });
+        piece.push(ModInstallOperations::InstallMod((mod_id.to_string(), version.clone())));
 
         ops.push(piece);
 

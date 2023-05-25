@@ -16,6 +16,16 @@ pub struct Version {
 }
 
 impl Version {
+    pub fn zero() -> Self {
+        Self {
+            major: 0,
+            minor: None,
+            patch: None,
+            revision: None,
+            suffix: None,
+        }
+    }
+    
     pub fn from_major(major: u16) -> Self {
         Self {
             major,

@@ -1,9 +1,12 @@
+use std::sync::Arc;
+use arc_swap::ArcSwap;
 use dirs::desktop_dir;
 use eframe::egui::{Align2, Button, CollapsingHeader, Color32, ComboBox, Context, Response, RichText, TextEdit, Ui, Vec2, Widget};
 use egui_file::FileDialog;
 use egui_toast::Toasts;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::Sender;
+use crate::config::Config;
 use crate::launch::{CinematicTemporalAntiAliasing, Device, DroneCamera, JoinOptions, LaunchOptions, WindowType};
 use crate::manager::ManagerCommand;
 use crate::ui::manager::UIManagerState;
@@ -34,7 +37,7 @@ pub struct LauncherState {
     cache_path_dialog: Option<FileDialog>,
 }
 
-pub fn launcher_ui(state: &mut UIManagerState, ui: &mut Ui, ctx: &Context, toasts: &mut Toasts, command: &Sender<ManagerCommand>) {
+pub fn launcher_ui(state: &mut UIManagerState, config: &Arc<ArcSwap<Config>>, ui: &mut Ui, ctx: &Context, toasts: &mut Toasts, command: &Sender<ManagerCommand>) {
     let launcher_state = &mut state.launcher_state;
 
     let resp = ComboBox::from_label("Device to launch for")
@@ -54,7 +57,10 @@ pub fn launcher_ui(state: &mut UIManagerState, ui: &mut Ui, ctx: &Context, toast
         .min_size(Vec2::new(300.0, 100.0))
         .ui(ui)
         .clicked() {
-        handle_error(command.blocking_send(ManagerCommand::SetLaunchOptions(launcher_state.cached_launch_options.0.clone())), toasts);
+
+        save_launch_options(config, launcher_state.cached_launch_options.0.clone());
+        handle_error(command.blocking_send(ManagerCommand::SaveConfig), toasts);
+
         launcher_state.cached_launch_options.1 = false;
         handle_error(command.blocking_send(ManagerCommand::LaunchNeos), toasts);
     }
@@ -63,7 +69,9 @@ pub fn launcher_ui(state: &mut UIManagerState, ui: &mut Ui, ctx: &Context, toast
         .min_size(Vec2::new(300.0, 20.0))
         .ui(ui)
         .clicked() {
-        handle_error(command.blocking_send(ManagerCommand::SetLaunchOptions(launcher_state.cached_launch_options.0.clone())), toasts);
+        save_launch_options(config, launcher_state.cached_launch_options.0.clone());
+        handle_error(command.blocking_send(ManagerCommand::SaveConfig), toasts);
+
         launcher_state.cached_launch_options.1 = false;
 
         let mut dialog = FileDialog::save_file(desktop_dir())
@@ -348,7 +356,9 @@ pub fn launcher_ui(state: &mut UIManagerState, ui: &mut Ui, ctx: &Context, toast
     ui.label("Make sure to save changes if you want launch options to persist,\nlaunching the game does save launch options");
 
     if ui.add_enabled(launcher_state.cached_launch_options.1, Button::new(" Save changes ")).clicked() {
-        handle_error(command.blocking_send(ManagerCommand::SetLaunchOptions(launcher_state.cached_launch_options.0.clone())), toasts);
+        save_launch_options(config, launcher_state.cached_launch_options.0.clone());
+        handle_error(command.blocking_send(ManagerCommand::SaveConfig), toasts);
+
         launcher_state.cached_launch_options.1 = false;
     }
 }
@@ -381,4 +391,12 @@ pub fn launcher_dialog(state: &mut UIManagerState, ctx: &Context, toasts: &mut T
             }
         }
     }
+}
+
+pub fn save_launch_options(config: &Arc<ArcSwap<Config>>, launch_options: LaunchOptions) {
+    let mut config_str = config.load().as_ref().clone();
+
+    config_str.launch_options = launch_options;
+
+    config.swap(Arc::new(config_str));
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use eframe::egui::{Align, Align2, Button, CentralPanel, Context, Label, Layout, RichText, TopBottomPanel, Vec2, Widget};
 use egui_file::{FileDialog};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
-use crate::config::Config;
+use crate::config::{Config, default_manifest_links, default_scan_locations};
 use crate::manager::validate_path;
 use crate::utils::place_in_middle;
 
@@ -55,13 +55,15 @@ pub fn first_time_ui(state: &mut FirstTimeState, ctx: &Context, toasts: &mut Toa
         let path = path.inner.inner.unwrap();
 
         let config = if let Some(mut config) = state.config.clone() {
-            config.neos_location = path;
+            config.neos_exe_location = path;
 
             config
         } else {
             Config {
-                neos_location: path,
+                neos_exe_location: path,
                 launch_options: Default::default(),
+                scan_locations: default_scan_locations(),
+                manifest_links: default_manifest_links(),
             }
         };
 
