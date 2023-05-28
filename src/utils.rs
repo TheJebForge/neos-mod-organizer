@@ -280,3 +280,9 @@ pub fn lerp_color(a: &Color32, b: &Color32, t: f32) -> Color32 {
 
     (a + (b - a) * t).into()
 }
+
+pub fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    let t = t.min(1.0).max(0.0);
+
+    a + (b - a) * t
+}

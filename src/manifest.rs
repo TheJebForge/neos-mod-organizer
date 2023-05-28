@@ -6,6 +6,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use futures::future::join_all;
 use serde::{Serialize, Deserialize};
+use strum_macros::{Display};
 use crate::version::{Version, VersionReq};
 
 pub async fn download_manifest(url: &str) -> Result<ModManifest, reqwest::Error> {
@@ -178,22 +179,30 @@ pub struct Author {
     pub icon_url: Option<String>
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Ord, PartialOrd, Eq, Display, Hash)]
+#[strum(serialize_all = "PascalCase")]
 pub enum Category {
+    #[strum(serialize = "Asset Importing Tweaks")]
     #[serde(rename = "Asset Importing Tweaks")]
     AssetImportingTweaks,
+    #[strum(serialize = "Bug Workarounds")]
     #[serde(rename = "Bug Workarounds")]
     BugWorkarounds,
+    #[strum(serialize = "Context Menu Tweaks")]
     #[serde(rename = "Context Menu Tweaks")]
     ContextMenuTweaks,
+    #[strum(serialize = "Dash Tweaks")]
     #[serde(rename = "Dash Tweaks")]
     DashTweaks,
     Developers,
+    #[strum(serialize = "General UI Tweaks")]
     #[serde(rename = "General UI Tweaks")]
     GeneralUITweaks,
+    #[strum(serialize = "Hardware Integrations")]
     #[serde(rename = "Hardware Integrations")]
     HardwareIntegrations,
     Inspectors,
+    #[strum(serialize = "Keybinds & Gestures")]
     #[serde(rename = "Keybinds & Gestures")]
     KeybindsGestures,
     Libraries,
@@ -202,11 +211,14 @@ pub enum Category {
     Misc,
     Optimization,
     Plugins,
+    #[strum(serialize = "Technical Tweaks")]
     #[serde(rename = "Technical Tweaks")]
     TechnicalTweaks,
+    #[strum(serialize = "Visual Tweaks")]
     #[serde(rename = "Visual Tweaks")]
     VisualTweaks,
     Wizards,
+    #[strum(default)]
     #[serde(other)]
     Unknown
 }
