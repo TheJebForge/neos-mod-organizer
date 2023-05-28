@@ -133,6 +133,7 @@ pub struct Mod {
     pub tags: Option<Vec<String>>,
     pub category: Category,
     pub flags: Option<Vec<String>>,
+    #[serde(default)]
     pub versions: HashMap<Version, ModVersion>
 }
 
