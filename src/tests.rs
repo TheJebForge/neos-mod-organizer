@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use crate::install::{ModFile, ModInstall, ModMap, VirtualInstall};
 use crate::manifest::{Artifact, Category, Conflict, Dependency, ManifestMods, Mod, ModVersion};
-use crate::version::{Version, VersionReq};
+use crate::version::{Version, Comparator};
 
 #[test]
 fn mod_install_missing_dependency() {
@@ -28,7 +28,7 @@ fn mod_install_missing_dependency() {
                     conflicts: None,
                     dependencies: Some(HashMap::from([
                         (format!("test.mod.dep"), Dependency {
-                            version: VersionReq::from_str("1").unwrap(),
+                            version: Comparator::from_str("1").unwrap(),
                         })
                     ])),
                     artifacts: vec![
@@ -79,7 +79,7 @@ fn mod_install_valid_dependency() {
                     conflicts: None,
                     dependencies: Some(HashMap::from([
                         (format!("test.mod.dep"), Dependency {
-                            version: VersionReq::from_str("1").unwrap(),
+                            version: Comparator::from_str("1").unwrap(),
                         })
                     ])),
                     artifacts: vec![
@@ -164,7 +164,7 @@ fn mod_install_invalid_dependency() {
                     conflicts: None,
                     dependencies: Some(HashMap::from([
                         (format!("test.mod.dep"), Dependency {
-                            version: VersionReq::from_str("1").unwrap(),
+                            version: Comparator::from_str("1").unwrap(),
                         })
                     ])),
                     artifacts: vec![
@@ -249,7 +249,7 @@ fn mod_install_multiple_versions() {
                     conflicts: None,
                     dependencies: Some(HashMap::from([
                         (format!("test.mod.dep"), Dependency {
-                            version: VersionReq::from_str("1").unwrap(),
+                            version: Comparator::from_str("1").unwrap(),
                         })
                     ])),
                     artifacts: vec![
@@ -352,7 +352,7 @@ fn mod_install_direct_conflict() {
                     flags: None,
                     conflicts: Some(HashMap::from([
                         (format!("test.mod.dep"), Conflict {
-                            version: VersionReq::from_str("*").unwrap(),
+                            version: Comparator::from_str("*").unwrap(),
                         })
                     ])),
                     dependencies: None,
@@ -437,7 +437,7 @@ fn mod_install_direct_conflict_unaffected() {
                     flags: None,
                     conflicts: Some(HashMap::from([
                         (format!("test.mod.dep"), Conflict {
-                            version: VersionReq::from_str("^0.1").unwrap(),
+                            version: Comparator::from_str("^0.1").unwrap(),
                         })
                     ])),
                     dependencies: None,

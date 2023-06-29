@@ -5,7 +5,7 @@ use std::ops::{Add, Mul, Sub};
 use std::path::{Component, Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use async_recursion::async_recursion;
-use eframe::egui::{Color32, InnerResponse, Rect, Response, SelectableLabel, TextEdit, Ui, Vec2, Widget, WidgetText};
+use eframe::egui::{Color32, Id, InnerResponse, Rect, Response, SelectableLabel, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use sha2::{Sha256, Digest};
 use sha2::digest::FixedOutput;
@@ -285,4 +285,10 @@ pub fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
     let t = t.min(1.0).max(0.0);
 
     a + (b - a) * t
+}
+
+pub fn get_next_id(ui: &mut Ui) -> Id {
+    let id = ui.next_auto_id();
+    ui.skip_ahead_auto_ids(1);
+    id
 }

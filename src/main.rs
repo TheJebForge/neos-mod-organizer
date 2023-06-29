@@ -33,6 +33,7 @@ use crate::manager::{Manager, validate_path};
 use crate::manifest::GlobalModList;
 use crate::ui::first_time::{first_time_ui, FirstTimeState};
 use crate::ui::manager::{manager_ui, ManagerTabs, UIManagerState};
+use crate::ui::manager::mod_list::ModListState;
 use crate::version::Version;
 
 
@@ -56,7 +57,6 @@ pub struct UIApp {
     popup: Option<(String, Instant)>,
     manager_commander: Option<Sender<ManagerCommand>>,
     manager_events: Option<Receiver<ManagerEvent>>,
-    alt_style: Arc<Style>,
     config: Option<Arc<ArcSwap<Config>>>,
 
     reset_timer: Instant
@@ -108,14 +108,10 @@ impl UIApp {
         style.visuals.popup_shadow.extrusion = 10.0;
         style.visuals.popup_shadow.color = Color32::from_rgba_premultiplied(0, 0, 0, 41);
 
-        let mut alternative_bg = style.clone();
-
-        alternative_bg.visuals.panel_fill = Color32::from_rgba_premultiplied(40, 40, 40, 255);
-
-        cc.egui_ctx.set_style(Arc::new(style));
+        cc.egui_ctx.set_style(style);
 
         let mut toast = Toasts::new()
-            .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
+            .anchor(Align2::RIGHT_BOTTOM, (-10.0, -10.0))
             .direction(Direction::BottomUp);
 
         match Config::load_config_sync() {
@@ -128,7 +124,7 @@ impl UIApp {
                         state: UIState::Manager(UIManagerState {
                             current_tab: ManagerTabs::Launcher,
                             launcher_state: Default::default(),
-                            mod_list_state: Default::default(),
+                            mod_list_state: ModListState::from_context(&cc.egui_ctx),
                             test_state: Default::default(),
                             manifest_mods: mods.clone(),
                             mod_list: Default::default(),
@@ -136,7 +132,6 @@ impl UIApp {
                         popup: None,
                         manager_commander: None,
                         manager_events: None,
-                        alt_style: Arc::new(alternative_bg),
                         config: Some(Arc::new(ArcSwap::new(Arc::new(c)))),
                         reset_timer: Instant::now(),
                     };
@@ -164,7 +159,6 @@ impl UIApp {
                         popup: None,
                         manager_commander: None,
                         manager_events: None,
-                        alt_style: Arc::new(alternative_bg),
                         config: None,
                         reset_timer: Instant::now(),
                     }
@@ -179,7 +173,6 @@ impl UIApp {
                             popup: None,
                             manager_commander: None,
                             manager_events: None,
-                            alt_style: Arc::new(alternative_bg),
                             config: None,
                             reset_timer: Instant::now(),
                         }
@@ -191,7 +184,6 @@ impl UIApp {
                             popup: None,
                             manager_commander: None,
                             manager_events: None,
-                            alt_style: Arc::new(alternative_bg),
                             config: None,
                             reset_timer: Instant::now(),
                         }
@@ -218,7 +210,7 @@ impl App for UIApp {
                         self.state = UIState::Manager(UIManagerState {
                             current_tab: ManagerTabs::Launcher,
                             launcher_state: Default::default(),
-                            mod_list_state: Default::default(),
+                            mod_list_state: ModListState::from_context(ctx),
                             test_state: Default::default(),
                             manifest_mods: mods,
                             mod_list: Default::default(),
@@ -239,7 +231,7 @@ impl App for UIApp {
             match &mut self.state {
                 UIState::Manager(state) => {
                     if self.manager_events.is_some() && self.manager_commander.is_some() {
-                        manager_ui(state, self.config.as_ref().unwrap(), ctx, &mut self.toast, self.manager_commander.as_ref().unwrap(), self.manager_events.as_mut().unwrap(), self.alt_style.clone());
+                        manager_ui(state, self.config.as_ref().unwrap(), ctx, &mut self.toast, self.manager_commander.as_ref().unwrap(), self.manager_events.as_mut().unwrap());
                     }
                 }
                 UIState::CompleteError(str) => {
@@ -256,5 +248,10 @@ impl App for UIApp {
         }
 
         self.toast.show(ctx);
+
+        /*Window::new("Style")
+            .show(ctx, |ui| {
+                ctx.style_ui(ui);
+            });*/
     }
 }

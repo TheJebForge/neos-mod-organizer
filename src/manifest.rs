@@ -5,9 +5,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
 use futures::future::join_all;
+use regex::Regex;
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display};
-use crate::version::{Version, VersionReq};
+use crate::version::{Version, Comparator, VersionReq};
 
 pub async fn download_manifest(url: &str) -> Result<ModManifest, reqwest::Error> {
     Ok(reqwest::get(url)
@@ -26,6 +27,46 @@ pub async fn aggregate_manifests(urls: &[String]) -> (ManifestMods, Vec<(String,
         .collect();
 
     (mods, errors)
+}
+
+pub async fn find_github_readme_link(repo_link: &str) -> Result<Option<String>, reqwest::Error> {
+    let Some(stripped_repo_link) = repo_link.strip_prefix("https://github.com/") else { // Splitting off github site URL
+        return Ok(None);
+    };
+
+    println!("stripped_repo {}", stripped_repo_link);
+
+    let Some((author, repository)) = stripped_repo_link.split_once('/') else { // Getting author and repo name separate
+        return Ok(None);
+    };
+
+    println!("author {}, repository {}", author, repository);
+
+    let body = reqwest::get(repo_link) // Getting HTML document of the repo
+        .await?
+        .text()
+        .await?;
+
+    let matcher = Regex::new(r#"(?i)blob(.+readme.md)">"#).unwrap(); // Expression to match readme blob link
+
+    let Some(body_captures) = matcher.captures(&body) else { // Match HTML document for the blob link
+        return Ok(None);
+    };
+
+    let Some(readme_link) = body_captures.get(1) else { // Get the capture group containing the link
+        return Ok(None);
+    };
+
+    println!("readme_link {}", readme_link.as_str());
+
+    Ok(Some(format!("https://raw.githubusercontent.com/{}/{}{}", author, repository, readme_link.as_str())))
+}
+
+pub async fn download_readme(readme_link: &str) -> Result<String, reqwest::Error> {
+    Ok(reqwest::get(readme_link)
+        .await?
+        .text()
+        .await?)
 }
 
 

@@ -234,11 +234,44 @@ impl FromStr for Version {
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct VersionReq {
+    comparators: Vec<Comparator>
+}
+
+impl VersionReq {
+    pub fn matches(&self, version: &Version) -> bool {
+        self.comparators.iter()
+            .all(|x| x.matches(version))
+    }
+}
+
+impl Display for VersionReq {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.comparators.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", "))
+    }
+}
+
+impl FromStr for VersionReq {
+    type Err = VersionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            comparators: s.split(",")
+                .map(|x| Comparator::from_str(x.trim()))
+                .collect::<Result<Vec<Comparator>, Self::Err>>()?
+        })
+    }
+}
+
+#[derive(Debug, Hash, Clone, Eq, PartialEq)]
+pub struct Comparator {
     version: Version,
     op: VersionOp
 }
 
-impl VersionReq {
+impl Comparator {
     pub fn matches(&self, version: &Version) -> bool {
         match self.op {
             VersionOp::Exact | VersionOp::Wildcard => {
@@ -374,7 +407,7 @@ impl VersionReq {
     }
 }
 
-impl FromStr for VersionReq {
+impl FromStr for Comparator {
     type Err = VersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -450,7 +483,7 @@ impl FromStr for VersionReq {
     }
 }
 
-impl Display for VersionReq {
+impl Display for Comparator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.op {
             VersionOp::Exact => write!(f, "={}", self.version),
@@ -559,6 +592,12 @@ impl Serialize for VersionReq {
     }
 }
 
+impl Serialize for Comparator {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
         struct VersionVisitor;
@@ -587,7 +626,7 @@ impl<'de> Deserialize<'de> for VersionReq {
             type Value = VersionReq;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                write!(formatter, "version requirement string formatted with numbers and dots and starting with operator")
+                write!(formatter, "comparator strings formatted with numbers and dots and starting with operator and separated with comma")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
@@ -596,5 +635,25 @@ impl<'de> Deserialize<'de> for VersionReq {
         }
 
         deserializer.deserialize_str(VersionReqVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for Comparator {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        struct ComparatorVisitor;
+
+        impl Visitor<'_> for ComparatorVisitor {
+            type Value = Comparator;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                write!(formatter, "version requirement string formatted with numbers and dots and starting with operator")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
+                Self::Value::from_str(v).map_err(|e| E::custom(e))
+            }
+        }
+
+        deserializer.deserialize_str(ComparatorVisitor)
     }
 }

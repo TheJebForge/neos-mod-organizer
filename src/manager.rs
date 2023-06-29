@@ -14,10 +14,11 @@ use tokio::time::{Instant, sleep};
 use crate::config::Config;
 use crate::install::{ActualInstall, ModFile, ModInstall, ModInstallOperations, ModMap};
 use crate::launch::LaunchOptions;
-use crate::manifest::{aggregate_manifests, Artifact, Category, Dependency, download_manifest, GlobalModList, Mod, ModVersion};
+use crate::manager::ManagerEvent::ReadmeResponse;
+use crate::manifest::{aggregate_manifests, Artifact, Category, Dependency, download_manifest, download_readme, find_github_readme_link, GlobalModList, GUID, Mod, ModVersion};
 use crate::resolver::{find_latest_matching, resolve_install_mod, ResolveResult};
 use crate::utils::{get_all_files_of_extension, sha256_file};
-use crate::version::{Version, VersionReq};
+use crate::version::{Version, Comparator};
 
 pub fn validate_path(path: &PathBuf) -> bool {
     let Some(dir) = path.parent() else {
@@ -43,12 +44,24 @@ pub fn validate_path(path: &PathBuf) -> bool {
     paths.into_iter().all(|path| path.exists())
 }
 
+pub async fn respond_to_readme_request(global_mods: &GlobalModList, guid: &str) -> Option<String> {
+    let mod_list = global_mods.mod_list.load();
+    let mod_info = mod_list.get(guid)?;
+    let source_location = mod_info.source_location.as_ref()?;
+
+    let readme_link = find_github_readme_link(source_location).await.ok()??;
+    let readme = download_readme(&readme_link).await.ok()?;
+
+    Some(readme)
+}
+
 pub struct Manager {
     command_receiver: Receiver<ManagerCommand>,
     event_sender: Sender<ManagerEvent>,
     config: Arc<ArcSwap<Config>>,
     global_mods: GlobalModList,
-    install: ActualInstall
+    install: ActualInstall,
+    readme_cache: HashMap<GUID, String>,
 }
 
 impl Manager {
@@ -61,6 +74,7 @@ impl Manager {
             config,
             global_mods: global_mods.clone(),
             install: ActualInstall::new_empty(&config_str.neos_exe_location.parent().unwrap(), global_mods),
+            readme_cache: Default::default(),
         }
     }
 
@@ -115,6 +129,23 @@ impl Manager {
                     }
                     ManagerCommand::RefreshModMap => {}
                     ManagerCommand::RefreshManifests => {}
+                    ManagerCommand::FindReadmeFor(guid) => {
+                        if let Some(cached_readme) = self.readme_cache.get(&guid) {
+                            self.event_sender.send(ReadmeResponse(
+                                Some(cached_readme.clone())
+                            )).await.ok();
+                        } else {
+                            let response = respond_to_readme_request(&self.global_mods, &guid).await;
+
+                            if let Some(readme) = response.as_ref() {
+                                self.readme_cache.insert(guid, readme.clone());
+                            }
+
+                            self.event_sender.send(ReadmeResponse(
+                                response
+                            )).await.ok();
+                        }
+                    }
                 }
             }
         }
@@ -140,7 +171,8 @@ pub enum ManagerCommand {
     LaunchNeos,
     CreateShortcut(PathBuf),
     RefreshManifests,
-    RefreshModMap
+    RefreshModMap,
+    FindReadmeFor(GUID),
 }
 
 /// For communication from Manager to UI
@@ -148,6 +180,7 @@ pub enum ManagerCommand {
 pub enum ManagerEvent {
     LaunchOptionsState(LaunchOptions),
     ModMapChanged(ModMap),
+    ReadmeResponse(Option<String>),
     Notification(ToastKind, String),
     LongNotification(ToastKind, String),
     Error(String)
