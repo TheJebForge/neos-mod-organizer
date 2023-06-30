@@ -1,4 +1,4 @@
-use eframe::egui::{Align2, Area, Color32, Context, FontFamily, FontId, Frame, Margin, Rect, ScrollArea, Sense, Stroke, TextStyle, Ui, vec2};
+use eframe::egui::{Align2, Area, CollapsingHeader, Color32, Context, FontFamily, FontId, Frame, Margin, Rect, ScrollArea, Sense, Separator, Stroke, TextStyle, Ui, vec2, Widget};
 use egui_toast::Toasts;
 use tokio::sync::mpsc::Sender;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
@@ -70,7 +70,7 @@ impl InfoModalState {
         }
     }
 
-    pub(crate) fn open_with_data(&mut self, mod_entry: &ModEntry, global_mods: &GlobalModList, toasts: &mut Toasts, command: &Sender<ManagerCommand>) {
+    pub(crate) fn open_with_entry_data(&mut self, mod_entry: &ModEntry, global_mods: &GlobalModList, toasts: &mut Toasts, command: &Sender<ManagerCommand>) {
         self.fill_in_info(mod_entry, global_mods);
         self.tab = InfoModalTabs::Readme;
         self.markdown_content = MarkdownContent::Loading;
@@ -97,6 +97,9 @@ pub fn more_info_modal(state: &mut UIManagerState, ctx: &Context, toasts: &mut T
     let info_modal_state = &mut state.mod_list_state.more_info;
 
     info_modal_state.modal.show(|ui| {
+        let pos = ui.next_widget_position();
+        ui.expand_to_include_rect(Rect::from_min_size(pos, vec2(750.0, 600.0)));
+
         if let Some(mod_info) = &info_modal_state.info {
             match more_info_header(ui, mod_info, &info_modal_state.id, &info_modal_state.tab) {
                 MoreInfoHeaderResponse::Nothing => {}
@@ -151,13 +154,28 @@ pub fn more_info_modal(state: &mut UIManagerState, ctx: &Context, toasts: &mut T
                 }
 
                 InfoModalTabs::Versions => {
-                    ScrollArea::vertical()
-                        .id_source("more_info_version_scroll")
-                        .auto_shrink([false; 2])
-                        .max_height(500.0)
+                    Frame::default()
+                        .outer_margin(Margin {
+                            left: 0.0,
+                            right: 0.0,
+                            top: 5.0,
+                            bottom: 0.0,
+                        })
                         .show(ui, |ui| {
-                            for (version, version_info) in &info_modal_state.versions {
-                                more_info_version(ui, version, version_info);
+                            if info_modal_state.versions.len() > 0 {
+                                ScrollArea::vertical()
+                                    .id_source("more_info_version_scroll")
+                                    .auto_shrink([false; 2])
+                                    .max_height(500.0)
+                                    .show(ui, |ui| {
+                                        for (version, version_info) in &info_modal_state.versions {
+                                            more_info_version(ui, version, version_info);
+                                        }
+                                    });
+                            } else {
+                                ui.centered_and_justified(|ui| {
+                                    ui.heading("No version info");
+                                });
                             }
                         });
                 }
@@ -167,14 +185,51 @@ pub fn more_info_modal(state: &mut UIManagerState, ctx: &Context, toasts: &mut T
 }
 
 fn more_info_version(ui: &mut Ui, version: &Version, version_info: &ModVersion) {
-    let visuals = ui.visuals();
-
     Frame::default()
-        .fill(visuals.widgets.inactive.bg_fill)
+        .fill(ui.visuals().widgets.inactive.bg_fill)
         .outer_margin(5.0)
+        .inner_margin(10.0)
         .rounding(4.0)
         .show(ui, |ui| {
-            ui.heading(version.to_string());
+            let pos = ui.next_widget_position();
+            ui.expand_to_include_rect(Rect::from_min_size(pos, vec2(ui.max_rect().width(), 20.0)));
+
+            ui.heading(format!("v{}", version));
+
+            if let Some(changelog) = &version_info.changelog {
+                ui.label(changelog);
+            } else {
+                ui.small("- Empty changelog -");
+            }
+
+            if version_info.dependencies.is_some() || version_info.conflicts.is_some() {
+                ui.scope(|ui| {
+                    ui.style_mut().visuals.widgets.noninteractive.bg_stroke.color = Color32::from_rgba_premultiplied(100, 100, 100, 255);
+
+                    ui.separator();
+                });
+            }
+
+            if let Some(dependencies) = &version_info.dependencies {
+                CollapsingHeader::new("Dependencies")
+                    .id_source(get_next_id(ui))
+                    .show(ui, |ui| {
+                        for (guid, dependency) in dependencies {
+                            ui.label(format!("• {} {}", guid, dependency.version));
+                        }
+                    });
+            }
+
+            if let Some(conflicts) = &version_info.conflicts {
+                CollapsingHeader::new("Conflicts")
+                    .id_source(get_next_id(ui))
+                    .show(ui, |ui| {
+                        for (guid, conflict) in conflicts {
+                            ui.label(format!("• {} {}", guid, conflict.version));
+                        }
+                    });
+            }
+
         });
 }
 

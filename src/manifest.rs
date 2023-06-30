@@ -227,6 +227,7 @@ pub enum Category {
     #[strum(serialize = "Asset Importing Tweaks")]
     #[serde(rename = "Asset Importing Tweaks")]
     AssetImportingTweaks,
+    Audio,
     #[strum(serialize = "Bug Workarounds")]
     #[serde(rename = "Bug Workarounds")]
     BugWorkarounds,

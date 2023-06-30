@@ -183,7 +183,7 @@ pub fn mod_list_ui(state: &mut UIManagerState, config: &Arc<ArcSwap<Config>>, ui
                                             mod_item.enabled = !mod_item.enabled;
                                         }
                                         DrawModEntryResponse::MoreInfo => {
-                                            mod_list_state.more_info.open_with_data(mod_item, global_mods, toasts, command);
+                                            mod_list_state.more_info.open_with_entry_data(mod_item, global_mods, toasts, command);
                                         }
                                         DrawModEntryResponse::Uninstall => {}
                                         DrawModEntryResponse::Update => {}
@@ -227,7 +227,7 @@ pub fn mod_list_ui(state: &mut UIManagerState, config: &Arc<ArcSwap<Config>>, ui
                                         mod_item.enabled = !mod_item.enabled;
                                     }
                                     DrawModEntryResponse::MoreInfo => {
-                                        mod_list_state.more_info.open_with_data(mod_item, global_mods, toasts, command);
+                                        mod_list_state.more_info.open_with_entry_data(mod_item, global_mods, toasts, command);
                                     }
                                     DrawModEntryResponse::Uninstall => {}
                                     DrawModEntryResponse::Update => {}
